@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no enums, so type/status are strings validated in lib/constants.ts.
+
+/// A source of used cooking oil (e.g. a restaurant) that drivers pick up from.
+model Vendor {
+  id          String   @id @default(cuid())
+  name        String
+  contactName String?
+  phone       String?
+  address     String
+  city        String
+  notes       String?
+  createdAt   DateTime @default(now())
+  stops       Stop[]
+}
+
+/// A customer that buys grease-trap or hood-cleaning service jobs.
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  contactName String?
+  phone       String?
+  address     String
+  city        String
+  notes       String?
+  createdAt   DateTime @default(now())
+  stops       Stop[]
+}
+
+model Driver {
+  id        String   @id @default(cuid())
+  name      String
+  /// Short code the driver types to sign in on the mobile app.
+  code      String   @unique
+  /// Bearer token the mobile app sends on every API call.
+  token     String   @unique
+  phone     String?
+  createdAt DateTime @default(now())
+  routes    Route[]
+}
+
+model Route {
+  id        String   @id @default(cuid())
+  /// Calendar day as YYYY-MM-DD. Stored as text so "today" never shifts with time zones.
+  date      String
+  name      String?
+  driverId  String
+  driver    Driver   @relation(fields: [driverId], references: [id])
+  createdAt DateTime @default(now())
+  stops     Stop[]
+
+  @@index([date])
+  @@index([driverId, date])
+}
+
+model Stop {
+  id               String    @id @default(cuid())
+  routeId          String
+  route            Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  order            Int
+  /// pickup | grease_trap | hood_cleaning
+  type             String
+  /// Set when type is pickup.
+  vendorId         String?
+  vendor           Vendor?   @relation(fields: [vendorId], references: [id])
+  /// Set when type is a service job.
+  customerId       String?
+  customer         Customer? @relation(fields: [customerId], references: [id])
+  /// pending | completed | skipped
+  status           String    @default("pending")
+  gallonsCollected Float?
+  /// File name inside web/uploads.
+  photoPath        String?
+  note             String?
+  completedAt      DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  @@index([routeId, order])
+}
+
+/// One row per action the mobile app pushed. The id is generated on the phone,
+/// so receiving the same action twice hits the primary key and is ignored.
+model SyncLog {
+  id              String   @id
+  driverId        String
+  stopId          String
+  type            String
+  /// JSON of the action as received.
+  payload         String
+  clientCreatedAt DateTime
+  receivedAt      DateTime @default(now())
+
+  @@index([stopId])
+}
